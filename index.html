@@ -69,6 +69,17 @@
   .hidden { display: none; }
   .result { text-align: center; }
   .result .big { font-size: 3.5rem; margin: 0; }
+  .review-list { display: grid; gap: 0; list-style: none; margin: 0; padding: 0; text-align: left; }
+  .review-item { border-top: 1px solid #3a4390; padding: 16px 0; overflow-wrap: anywhere; }
+  .review-item h3 { font-size: 1.05rem; line-height: 1.4; margin: 0 0 10px; }
+  .review-item p { margin: 6px 0; }
+  .review-status { font-weight: 700; }
+  .review-status.correct { color: var(--ok); }
+  .review-status.wrong { color: var(--bad); }
+  .screen-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 16px; }
+  .screen-actions button { margin-top: 0; }
+  body.review-mode { align-items: flex-start; }
+  main { margin-block: auto; }
   .rocket { display: inline-block; font-size: 4rem; animation: fly 2s ease-in-out infinite; }
   @keyframes fly { 50% { transform: translateY(-14px) rotate(8deg); } }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -99,7 +110,18 @@
     <h2 id="rank" tabindex="-1"></h2>
     <p class="big" id="final"></p>
     <p id="msg"></p>
-    <button class="restart" id="restart">다시 도전하기</button>
+    <div class="screen-actions">
+      <button class="restart" id="reviewButton">답안 검토</button>
+      <button class="restart" id="restart">다시 도전하기</button>
+    </div>
+  </section>
+
+  <section id="review" class="hidden" aria-labelledby="reviewTitle">
+    <h2 id="reviewTitle" tabindex="-1">답안 검토</h2>
+    <ol class="review-list" id="reviewList"></ol>
+    <div class="screen-actions">
+      <button class="restart" id="backToResult">결과로 돌아가기</button>
+    </div>
   </section>
 </main>
 
@@ -119,6 +141,7 @@ const Q = [
 
 const $ = id => document.getElementById(id);
 let i = 0, score = 0, locked = false;
+const selectedAnswers = Array(Q.length).fill(null);
 
 function render() {
   const d = Q[i]; locked = false;
@@ -141,6 +164,7 @@ function render() {
 
 function pick(n) {
   if (locked) return; locked = true;
+  selectedAnswers[i] = n;
   const d = Q[i], btns = document.querySelectorAll(".opt");
   btns.forEach(b => b.disabled = true);
   btns[d.a].classList.add("correct");
@@ -170,10 +194,60 @@ function finish() {
   $("rank").focus();
 }
 
+function appendReviewDetail(item, label, value) {
+  const line = document.createElement("p");
+  const heading = document.createElement("strong");
+  heading.textContent = `${label}: `;
+  line.append(heading, document.createTextNode(value));
+  item.appendChild(line);
+}
+
+function renderReview() {
+  const list = $("reviewList");
+  list.replaceChildren();
+  Q.forEach((question, index) => {
+    const selected = selectedAnswers[index];
+    const item = document.createElement("li");
+    const heading = document.createElement("h3");
+    const status = document.createElement("p");
+    const selectedText = selected === null ? "응답 없음" : `${selected + 1}. ${question.o[selected]}`;
+    const correct = selected === question.a;
+
+    item.className = "review-item";
+    heading.textContent = `${index + 1}번 문항. ${question.q}`;
+    status.className = `review-status ${correct ? "correct" : "wrong"}`;
+    status.textContent = `결과: ${correct ? "정답" : "오답"}`;
+    item.appendChild(heading);
+    appendReviewDetail(item, "선택한 답", selectedText);
+    appendReviewDetail(item, "정답", `${question.a + 1}. ${question.o[question.a]}`);
+    item.appendChild(status);
+    list.appendChild(item);
+  });
+}
+
+function showReview() {
+  renderReview();
+  $("result").classList.add("hidden");
+  $("review").classList.remove("hidden");
+  document.body.classList.add("review-mode");
+  $("reviewTitle").focus();
+}
+
+function showResult() {
+  $("review").classList.add("hidden");
+  $("result").classList.remove("hidden");
+  document.body.classList.remove("review-mode");
+  $("rank").focus();
+}
+
 $("next").onclick = () => { if (++i < Q.length) render(); else finish(); };
+$("reviewButton").onclick = showReview;
+$("backToResult").onclick = showResult;
 $("restart").onclick = () => {
-  i = 0; score = 0; $("score").textContent = "점수 0";
-  $("result").classList.add("hidden"); $("quiz").classList.remove("hidden"); render();
+  i = 0; score = 0; selectedAnswers.fill(null); $("score").textContent = "점수 0";
+  $("review").classList.add("hidden"); $("result").classList.add("hidden");
+  document.body.classList.remove("review-mode");
+  $("quiz").classList.remove("hidden"); render();
 };
 document.addEventListener("keydown", e => {
   if (e.key >= "1" && e.key <= "4" && !$("quiz").classList.contains("hidden")) {
