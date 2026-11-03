@@ -66,9 +66,16 @@
     background: var(--accent); color: #1a1a1a;
   }
   .next:hover, .restart:hover { filter: brightness(1.1); }
+  .restart.clear { background: transparent; border: 2px solid var(--muted); color: var(--text); padding: 8px 18px; }
   .hidden { display: none; }
   .result { text-align: center; }
   .result .big { font-size: 3.5rem; margin: 0; }
+  .record-msg { color: var(--accent); font-weight: 700; min-height: 1.5em; margin: 8px 0 0; }
+  .records { margin-top: 20px; padding-top: 16px; border-top: 1px solid #3a4390; }
+  .records h3 { margin: 0 0 8px; font-size: 1.1rem; }
+  .records p { margin: 6px 0; }
+  .record-list { list-style: none; margin: 8px 0 12px; padding: 0; }
+  .record-list li { padding: 4px 0; overflow-wrap: anywhere; }
   .review-list { display: grid; gap: 0; list-style: none; margin: 0; padding: 0; text-align: left; }
   .review-item { border-top: 1px solid #3a4390; padding: 16px 0; overflow-wrap: anywhere; }
   .review-item h3 { font-size: 1.05rem; line-height: 1.4; margin: 0 0 10px; }
@@ -110,6 +117,14 @@
     <h2 id="rank" tabindex="-1"></h2>
     <p class="big" id="final"></p>
     <p id="msg"></p>
+    <p class="record-msg" id="recordMsg"></p>
+    <div class="records">
+      <h3>내 기록</h3>
+      <p id="bestScore"></p>
+      <ol class="record-list" id="recentList" aria-label="최근 기록"></ol>
+      <p id="emptyRecords">아직 기록이 없어요.</p>
+      <button class="restart clear" id="clearRecords">기록 지우기</button>
+    </div>
     <div class="screen-actions">
       <button class="restart" id="reviewButton">답안 검토</button>
       <button class="restart" id="restart">다시 도전하기</button>
@@ -142,6 +157,50 @@ const Q = [
 const $ = id => document.getElementById(id);
 let i = 0, score = 0, locked = false;
 const selectedAnswers = Array(Q.length).fill(null);
+
+const STORAGE_KEY = "spaceQuizRecords";
+const MAX_RECENT = 5;
+let records = loadRecords();
+
+function loadRecords() {
+  const empty = { best: null, recent: [] };
+  try {
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    const validScore = s => Number.isInteger(s) && s >= 0 && s <= Q.length;
+    if (!data || !Array.isArray(data.recent)) return empty;
+    const recent = data.recent
+      .filter(r => r && validScore(r.score) && !isNaN(Date.parse(r.date)))
+      .slice(0, MAX_RECENT)
+      .map(r => ({ score: r.score, date: r.date }));
+    return { best: validScore(data.best) ? data.best : null, recent };
+  } catch { return empty; }
+}
+
+function saveRecords() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(records)); } catch { /* 저장소를 쓸 수 없어도 이번 방문 중에는 메모리 기록을 유지 */ }
+}
+
+function renderRecords() {
+  const has = records.recent.length > 0;
+  $("bestScore").textContent = records.best === null ? "" : `최고 점수: ${records.best} / ${Q.length}`;
+  $("emptyRecords").classList.toggle("hidden", has);
+  $("recentList").classList.toggle("hidden", !has);
+  $("clearRecords").classList.toggle("hidden", !has);
+  $("recentList").replaceChildren(...records.recent.map(r => {
+    const li = document.createElement("li");
+    li.textContent = `${new Date(r.date).toLocaleDateString("ko-KR")} — ${r.score} / ${Q.length}`;
+    return li;
+  }));
+}
+
+function recordScore() {
+  const isNewBest = records.best === null || score > records.best;
+  if (isNewBest) records.best = score;
+  records.recent = [{ score, date: new Date().toISOString() }, ...records.recent].slice(0, MAX_RECENT);
+  saveRecords();
+  $("recordMsg").textContent = isNewBest ? `🎉 새 최고 점수예요! ${score} / ${Q.length}` : "";
+  renderRecords();
+}
 
 function render() {
   const d = Q[i]; locked = false;
@@ -191,6 +250,7 @@ function finish() {
         : ["🌠 우주 새내기", "우주는 넓고 배울 건 많아요. 다시 도전!"];
   $("rank").textContent = r[0]; $("msg").textContent = r[1];
   $("final").textContent = `${score} / ${Q.length}`;
+  recordScore();
   $("rank").focus();
 }
 
@@ -243,6 +303,14 @@ function showResult() {
 $("next").onclick = () => { if (++i < Q.length) render(); else finish(); };
 $("reviewButton").onclick = showReview;
 $("backToResult").onclick = showResult;
+$("clearRecords").onclick = () => {
+  if (!confirm("저장된 기록을 모두 지울까요?")) return;
+  records = { best: null, recent: [] };
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* 저장소 접근 불가 시 메모리 기록만 비움 */ }
+  $("recordMsg").textContent = "기록을 모두 지웠어요.";
+  renderRecords();
+  $("rank").focus();
+};
 $("restart").onclick = () => {
   i = 0; score = 0; selectedAnswers.fill(null); $("score").textContent = "점수 0";
   $("review").classList.add("hidden"); $("result").classList.add("hidden");
