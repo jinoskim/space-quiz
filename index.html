@@ -259,6 +259,29 @@
       { question: "빛조차 빠져나오기 어려울 만큼 중력이 강한 천체는 무엇일까요?", options: ["소행성", "블랙홀", "혜성", "유성"], answer: 1, explanation: "블랙홀의 사건의 지평선 안에서는 빛조차 밖으로 빠져나올 수 없어요." }
     ];
 
+    function shuffle(items) {
+      const shuffled = items.slice();
+      for (let index = shuffled.length - 1; index > 0; index--) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+      }
+      return shuffled;
+    }
+
+    function createRound() {
+      return shuffle(questions).map(item => {
+        const options = shuffle(item.options.map((text, index) => ({
+          text,
+          isAnswer: index === item.answer
+        })));
+        return {
+          ...item,
+          options: options.map(option => option.text),
+          answer: options.findIndex(option => option.isAnswer)
+        };
+      });
+    }
+
     const elements = {
       quiz: document.getElementById("quiz"),
       result: document.getElementById("result"),
@@ -280,20 +303,21 @@
     let current = 0;
     let score = 0;
     let answered = false;
+    let roundQuestions = createRound();
 
     function updateStats() {
       const completed = current + (answered ? 1 : 0);
-      elements.progressText.textContent = `${completed} / ${questions.length} 완료`;
+      elements.progressText.textContent = `${completed} / ${roundQuestions.length} 완료`;
       elements.scoreText.textContent = `${score}점`;
-      elements.progressFill.style.width = `${completed / questions.length * 100}%`;
+      elements.progressFill.style.width = `${completed / roundQuestions.length * 100}%`;
       elements.progress.setAttribute("aria-valuenow", completed);
-      elements.progress.setAttribute("aria-valuetext", `${questions.length}문제 중 ${completed}문제 완료`);
+      elements.progress.setAttribute("aria-valuetext", `${roundQuestions.length}문제 중 ${completed}문제 완료`);
     }
 
     function showQuestion(focus = false) {
       answered = false;
-      const item = questions[current];
-      elements.number.textContent = `QUESTION ${String(current + 1).padStart(2, "0")} / ${questions.length}`;
+      const item = roundQuestions[current];
+      elements.number.textContent = `QUESTION ${String(current + 1).padStart(2, "0")} / ${roundQuestions.length}`;
       elements.question.textContent = item.question;
       elements.options.replaceChildren();
       elements.feedback.hidden = true;
@@ -325,7 +349,7 @@
     function selectAnswer(selected) {
       if (answered) return;
       answered = true;
-      const item = questions[current];
+      const item = roundQuestions[current];
       const correct = selected === item.answer;
       if (correct) score++;
       Array.from(elements.options.children).forEach((button, index) => {
@@ -371,7 +395,7 @@
 
     elements.next.addEventListener("click", () => {
       if (!answered) return;
-      if (current === questions.length - 1) {
+      if (current === roundQuestions.length - 1) {
         showResult();
       } else {
         current++;
@@ -381,6 +405,7 @@
     elements.restart.addEventListener("click", () => {
       current = 0;
       score = 0;
+      roundQuestions = createRound();
       elements.result.classList.remove("celebrate");
       elements.result.hidden = true;
       elements.quiz.hidden = false;
