@@ -139,6 +139,15 @@
     .result-copy { margin: 10px 0 20px; color: #b8c0da; word-break: keep-all; }
     .result-score { padding: 16px; border: 1px solid #3b4463; border-radius: 14px; background: #20283f; color: #bfc6df; }
     .result-score strong { color: #c7b9ff; font-size: 1.6rem; }
+    .review { margin-top: 24px; text-align: left; }
+    .review h3 { margin: 0 0 12px; font-size: 1.1rem; }
+    .review-empty { margin: 0; color: #ced5ed; }
+    .review-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    .review-item { padding: 15px; border: 1px solid #3b4463; border-radius: 12px; background: #20283f; overflow-wrap: anywhere; }
+    .review-item h4 { margin: 0 0 10px; font-size: 1rem; }
+    .review-item dl { margin: 0; }
+    .review-item dt { margin-top: 8px; color: #bcc4ff; font-size: .85rem; font-weight: 800; }
+    .review-item dd { margin: 2px 0 0; color: #ced5ed; }
     .footer { margin: 21px 0 0; color: #838daa; font-size: .75rem; text-align: center; }
     @media (max-width: 420px) {
       body { padding: 22px 14px 36px; }
@@ -183,6 +192,9 @@
       .result-emoji { border-color: #d0ccef; background: #f1efff; }
       .result-copy { color: #555d78; }
       .result-score { border-color: #d1d4e6; background: #f6f7fc; color: #515873; }
+      .review-empty, .review-item dd { color: #414863; }
+      .review-item { border-color: #d1d4e6; background: #f6f7fc; }
+      .review-item dt { color: #5555a0; }
       button:focus-visible { outline-color: #5149ab; box-shadow: 0 0 0 6px rgba(81, 73, 171, .16); }
       .option:focus-visible { border-color: #5149ab; outline-color: #5149ab; box-shadow: inset 0 0 0 1px rgba(81, 73, 171, .3), 0 0 0 5px rgba(81, 73, 171, .15); }
     }
@@ -238,6 +250,11 @@
           <h2 id="result-title" tabindex="-1"></h2>
           <p class="result-copy" id="result-copy"></p>
           <div class="result-score">최종 점수<br><strong id="result-score"></strong> / 10점</div>
+          <section class="review" aria-labelledby="review-title">
+            <h3 id="review-title">오답 복습</h3>
+            <p class="review-empty" id="review-empty" hidden>틀린 문제가 없어요. 모든 문제를 맞혔어요!</p>
+            <ol class="review-list" id="review-list"></ol>
+          </section>
           <button class="primary" id="restart" type="button">다시 탐험하기 <span aria-hidden="true">↗</span></button>
         </div>
       </div>
@@ -298,11 +315,14 @@
       resultTitle: document.getElementById("result-title"),
       resultCopy: document.getElementById("result-copy"),
       resultScore: document.getElementById("result-score"),
+      reviewEmpty: document.getElementById("review-empty"),
+      reviewList: document.getElementById("review-list"),
       restart: document.getElementById("restart")
     };
     let current = 0;
     let score = 0;
     let answered = false;
+    let wrongAnswers = [];
     let roundQuestions = createRound();
 
     function updateStats() {
@@ -351,7 +371,11 @@
       answered = true;
       const item = roundQuestions[current];
       const correct = selected === item.answer;
-      if (correct) score++;
+      if (correct) {
+        score++;
+      } else {
+        wrongAnswers.push({ questionIndex: current, selected });
+      }
       Array.from(elements.options.children).forEach((button, index) => {
         button.disabled = true;
         if (index === item.answer || (index === selected && !correct)) {
@@ -390,6 +414,30 @@
       elements.resultTitle.textContent = reaction[1];
       elements.resultCopy.textContent = reaction[2];
       elements.resultScore.textContent = score;
+      elements.reviewEmpty.hidden = wrongAnswers.length > 0;
+      elements.reviewList.hidden = wrongAnswers.length === 0;
+      elements.reviewList.replaceChildren();
+      wrongAnswers.forEach(({ questionIndex, selected }) => {
+        const item = roundQuestions[questionIndex];
+        const entry = document.createElement("li");
+        entry.className = "review-item";
+        const heading = document.createElement("h4");
+        heading.textContent = `${questionIndex + 1}. ${item.question}`;
+        const details = document.createElement("dl");
+        [
+          ["내가 고른 답", item.options[selected]],
+          ["정답", item.options[item.answer]],
+          ["해설", item.explanation]
+        ].forEach(([label, text]) => {
+          const term = document.createElement("dt");
+          term.textContent = label;
+          const description = document.createElement("dd");
+          description.textContent = text;
+          details.append(term, description);
+        });
+        entry.append(heading, details);
+        elements.reviewList.append(entry);
+      });
       elements.resultTitle.focus();
     }
 
@@ -405,6 +453,9 @@
     elements.restart.addEventListener("click", () => {
       current = 0;
       score = 0;
+      wrongAnswers = [];
+      elements.reviewList.replaceChildren();
+      elements.reviewEmpty.hidden = true;
       roundQuestions = createRound();
       elements.result.classList.remove("celebrate");
       elements.result.hidden = true;
