@@ -138,7 +138,9 @@
     .result h2 { font-size: 1.65rem; }
     .result-copy { margin: 10px 0 20px; color: #b8c0da; word-break: keep-all; }
     .result-score { padding: 16px; border: 1px solid #3b4463; border-radius: 14px; background: #20283f; color: #bfc6df; }
+    .result-score + .result-score { margin-top: 10px; }
     .result-score strong { color: #c7b9ff; font-size: 1.6rem; }
+    .result-storage-status { margin: 12px 0 0; color: #b8c0da; font-size: .82rem; }
     .review { margin-top: 24px; text-align: left; }
     .review h3 { margin: 0 0 12px; font-size: 1.1rem; }
     .review-empty { margin: 0; color: #ced5ed; }
@@ -192,6 +194,7 @@
       .result-emoji { border-color: #d0ccef; background: #f1efff; }
       .result-copy { color: #555d78; }
       .result-score { border-color: #d1d4e6; background: #f6f7fc; color: #515873; }
+      .result-storage-status { color: #555d78; }
       .review-empty, .review-item dd { color: #414863; }
       .review-item { border-color: #d1d4e6; background: #f6f7fc; }
       .review-item dt { color: #5555a0; }
@@ -249,7 +252,9 @@
           <p class="eyebrow">MISSION COMPLETE</p>
           <h2 id="result-title" tabindex="-1"></h2>
           <p class="result-copy" id="result-copy"></p>
-          <div class="result-score">최종 점수<br><strong id="result-score"></strong> / 10점</div>
+          <div class="result-score">이번 점수<br><strong id="result-score"></strong> / 10점</div>
+          <div class="result-score">최고 기록<br><strong id="high-score"></strong> / 10점</div>
+          <p class="result-storage-status" id="result-storage-status" role="status" aria-live="polite"></p>
           <section class="review" aria-labelledby="review-title">
             <h3 id="review-title">오답 복습</h3>
             <p class="review-empty" id="review-empty" hidden>틀린 문제가 없어요. 모든 문제를 맞혔어요!</p>
@@ -315,6 +320,8 @@
       resultTitle: document.getElementById("result-title"),
       resultCopy: document.getElementById("result-copy"),
       resultScore: document.getElementById("result-score"),
+      highScore: document.getElementById("high-score"),
+      resultStorageStatus: document.getElementById("result-storage-status"),
       reviewEmpty: document.getElementById("review-empty"),
       reviewList: document.getElementById("review-list"),
       restart: document.getElementById("restart")
@@ -322,6 +329,22 @@
     let current = 0;
     let score = 0;
     let answered = false;
+    const highScoreStorageKey = "spaceQuizHighScore";
+    let highScore = null;
+    let highScoreStorageAvailable = true;
+    try {
+      const savedHighScore = window.localStorage.getItem(highScoreStorageKey);
+      if (savedHighScore === null) {
+        highScore = 0;
+      } else {
+        const parsedHighScore = Number(savedHighScore);
+        highScore = Number.isInteger(parsedHighScore) && parsedHighScore >= 0 && parsedHighScore <= questions.length
+          ? parsedHighScore
+          : 0;
+      }
+    } catch {
+      highScoreStorageAvailable = false;
+    }
     let wrongAnswers = [];
     let roundQuestions = createRound();
 
@@ -404,6 +427,16 @@
     function showResult() {
       elements.quiz.hidden = true;
       elements.result.hidden = false;
+      let isNewHighScore = false;
+      if (highScoreStorageAvailable && score > highScore) {
+        try {
+          window.localStorage.setItem(highScoreStorageKey, String(score));
+          highScore = score;
+          isNewHighScore = true;
+        } catch {
+          highScoreStorageAvailable = false;
+        }
+      }
       const reaction = score >= 8
         ? ["🚀", "멋진 우주 탐험가!", "놀라운 실력이에요. 우주를 향한 호기심이 빛나고 있어요!"]
         : score >= 5
@@ -414,6 +447,12 @@
       elements.resultTitle.textContent = reaction[1];
       elements.resultCopy.textContent = reaction[2];
       elements.resultScore.textContent = score;
+      elements.highScore.textContent = highScore === null ? "확인 불가" : highScore;
+      elements.resultStorageStatus.textContent = highScoreStorageAvailable
+        ? isNewHighScore ? "새로운 최고 기록을 저장했어요!" : "최고 기록은 이 기기에 저장돼요."
+        : highScore === null
+          ? "브라우저 저장소를 사용할 수 없어 최고 기록을 확인하거나 저장할 수 없어요. 이번 점수는 정상적으로 표시돼요."
+          : "브라우저 저장소를 사용할 수 없어 새 최고 기록을 저장할 수 없어요. 이번 점수는 정상적으로 표시돼요.";
       elements.reviewEmpty.hidden = wrongAnswers.length > 0;
       elements.reviewList.hidden = wrongAnswers.length === 0;
       elements.reviewList.replaceChildren();
