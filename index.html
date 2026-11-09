@@ -138,7 +138,9 @@
     .result h2 { font-size: 1.65rem; }
     .result-copy { margin: 10px 0 20px; color: #b8c0da; word-break: keep-all; }
     .result-score { padding: 16px; border: 1px solid #3b4463; border-radius: 14px; background: #20283f; color: #bfc6df; }
+    .result-score + .result-score { margin-top: 10px; }
     .result-score strong { color: #c7b9ff; font-size: 1.6rem; }
+    .result-storage-status { margin: 12px 0 0; color: #b8c0da; font-size: .82rem; }
     .footer { margin: 21px 0 0; color: #838daa; font-size: .75rem; text-align: center; }
     @media (max-width: 420px) {
       body { padding: 22px 14px 36px; }
@@ -183,6 +185,7 @@
       .result-emoji { border-color: #d0ccef; background: #f1efff; }
       .result-copy { color: #555d78; }
       .result-score { border-color: #d1d4e6; background: #f6f7fc; color: #515873; }
+      .result-storage-status { color: #555d78; }
       button:focus-visible { outline-color: #5149ab; box-shadow: 0 0 0 6px rgba(81, 73, 171, .16); }
       .option:focus-visible { border-color: #5149ab; outline-color: #5149ab; box-shadow: inset 0 0 0 1px rgba(81, 73, 171, .3), 0 0 0 5px rgba(81, 73, 171, .15); }
     }
@@ -237,7 +240,9 @@
           <p class="eyebrow">MISSION COMPLETE</p>
           <h2 id="result-title" tabindex="-1"></h2>
           <p class="result-copy" id="result-copy"></p>
-          <div class="result-score">최종 점수<br><strong id="result-score"></strong> / 10점</div>
+          <div class="result-score">이번 점수<br><strong id="result-score"></strong> / 10점</div>
+          <div class="result-score">최고 기록<br><strong id="high-score"></strong> / 10점</div>
+          <p class="result-storage-status" id="result-storage-status" role="status" aria-live="polite"></p>
           <button class="primary" id="restart" type="button">다시 탐험하기 <span aria-hidden="true">↗</span></button>
         </div>
       </div>
@@ -275,11 +280,29 @@
       resultTitle: document.getElementById("result-title"),
       resultCopy: document.getElementById("result-copy"),
       resultScore: document.getElementById("result-score"),
+      highScore: document.getElementById("high-score"),
+      resultStorageStatus: document.getElementById("result-storage-status"),
       restart: document.getElementById("restart")
     };
     let current = 0;
     let score = 0;
     let answered = false;
+    const highScoreStorageKey = "spaceQuizHighScore";
+    let highScore = null;
+    let highScoreStorageAvailable = true;
+    try {
+      const savedHighScore = window.localStorage.getItem(highScoreStorageKey);
+      if (savedHighScore === null) {
+        highScore = 0;
+      } else {
+        const parsedHighScore = Number(savedHighScore);
+        highScore = Number.isInteger(parsedHighScore) && parsedHighScore >= 0 && parsedHighScore <= questions.length
+          ? parsedHighScore
+          : 0;
+      }
+    } catch {
+      highScoreStorageAvailable = false;
+    }
 
     function updateStats() {
       const completed = current + (answered ? 1 : 0);
@@ -356,6 +379,16 @@
     function showResult() {
       elements.quiz.hidden = true;
       elements.result.hidden = false;
+      let isNewHighScore = false;
+      if (highScoreStorageAvailable && score > highScore) {
+        try {
+          window.localStorage.setItem(highScoreStorageKey, String(score));
+          highScore = score;
+          isNewHighScore = true;
+        } catch {
+          highScoreStorageAvailable = false;
+        }
+      }
       const reaction = score >= 8
         ? ["🚀", "멋진 우주 탐험가!", "놀라운 실력이에요. 우주를 향한 호기심이 빛나고 있어요!"]
         : score >= 5
@@ -366,6 +399,12 @@
       elements.resultTitle.textContent = reaction[1];
       elements.resultCopy.textContent = reaction[2];
       elements.resultScore.textContent = score;
+      elements.highScore.textContent = highScore === null ? "확인 불가" : highScore;
+      elements.resultStorageStatus.textContent = highScoreStorageAvailable
+        ? isNewHighScore ? "새로운 최고 기록을 저장했어요!" : "최고 기록은 이 기기에 저장돼요."
+        : highScore === null
+          ? "브라우저 저장소를 사용할 수 없어 최고 기록을 확인하거나 저장할 수 없어요. 이번 점수는 정상적으로 표시돼요."
+          : "브라우저 저장소를 사용할 수 없어 새 최고 기록을 저장할 수 없어요. 이번 점수는 정상적으로 표시돼요.";
       elements.resultTitle.focus();
     }
 
