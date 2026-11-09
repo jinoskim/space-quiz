@@ -141,6 +141,15 @@
     .result-score + .result-score { margin-top: 10px; }
     .result-score strong { color: #c7b9ff; font-size: 1.6rem; }
     .result-storage-status { margin: 12px 0 0; color: #b8c0da; font-size: .82rem; }
+    .review { margin-top: 24px; text-align: left; }
+    .review h3 { margin: 0 0 12px; font-size: 1.1rem; }
+    .review-empty { margin: 0; color: #ced5ed; }
+    .review-list { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+    .review-item { padding: 15px; border: 1px solid #3b4463; border-radius: 12px; background: #20283f; overflow-wrap: anywhere; }
+    .review-item h4 { margin: 0 0 10px; font-size: 1rem; }
+    .review-item dl { margin: 0; }
+    .review-item dt { margin-top: 8px; color: #bcc4ff; font-size: .85rem; font-weight: 800; }
+    .review-item dd { margin: 2px 0 0; color: #ced5ed; }
     .footer { margin: 21px 0 0; color: #838daa; font-size: .75rem; text-align: center; }
     @media (max-width: 420px) {
       body { padding: 22px 14px 36px; }
@@ -186,6 +195,9 @@
       .result-copy { color: #555d78; }
       .result-score { border-color: #d1d4e6; background: #f6f7fc; color: #515873; }
       .result-storage-status { color: #555d78; }
+      .review-empty, .review-item dd { color: #414863; }
+      .review-item { border-color: #d1d4e6; background: #f6f7fc; }
+      .review-item dt { color: #5555a0; }
       button:focus-visible { outline-color: #5149ab; box-shadow: 0 0 0 6px rgba(81, 73, 171, .16); }
       .option:focus-visible { border-color: #5149ab; outline-color: #5149ab; box-shadow: inset 0 0 0 1px rgba(81, 73, 171, .3), 0 0 0 5px rgba(81, 73, 171, .15); }
     }
@@ -243,6 +255,11 @@
           <div class="result-score">이번 점수<br><strong id="result-score"></strong> / 10점</div>
           <div class="result-score">최고 기록<br><strong id="high-score"></strong> / 10점</div>
           <p class="result-storage-status" id="result-storage-status" role="status" aria-live="polite"></p>
+          <section class="review" aria-labelledby="review-title">
+            <h3 id="review-title">오답 복습</h3>
+            <p class="review-empty" id="review-empty" hidden>틀린 문제가 없어요. 모든 문제를 맞혔어요!</p>
+            <ol class="review-list" id="review-list"></ol>
+          </section>
           <button class="primary" id="restart" type="button">다시 탐험하기 <span aria-hidden="true">↗</span></button>
         </div>
       </div>
@@ -264,6 +281,29 @@
       { question: "빛조차 빠져나오기 어려울 만큼 중력이 강한 천체는 무엇일까요?", options: ["소행성", "블랙홀", "혜성", "유성"], answer: 1, explanation: "블랙홀의 사건의 지평선 안에서는 빛조차 밖으로 빠져나올 수 없어요." }
     ];
 
+    function shuffle(items) {
+      const shuffled = items.slice();
+      for (let index = shuffled.length - 1; index > 0; index--) {
+        const randomIndex = Math.floor(Math.random() * (index + 1));
+        [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+      }
+      return shuffled;
+    }
+
+    function createRound() {
+      return shuffle(questions).map(item => {
+        const options = shuffle(item.options.map((text, index) => ({
+          text,
+          isAnswer: index === item.answer
+        })));
+        return {
+          ...item,
+          options: options.map(option => option.text),
+          answer: options.findIndex(option => option.isAnswer)
+        };
+      });
+    }
+
     const elements = {
       quiz: document.getElementById("quiz"),
       result: document.getElementById("result"),
@@ -282,6 +322,8 @@
       resultScore: document.getElementById("result-score"),
       highScore: document.getElementById("high-score"),
       resultStorageStatus: document.getElementById("result-storage-status"),
+      reviewEmpty: document.getElementById("review-empty"),
+      reviewList: document.getElementById("review-list"),
       restart: document.getElementById("restart")
     };
     let current = 0;
@@ -303,20 +345,22 @@
     } catch {
       highScoreStorageAvailable = false;
     }
+    let wrongAnswers = [];
+    let roundQuestions = createRound();
 
     function updateStats() {
       const completed = current + (answered ? 1 : 0);
-      elements.progressText.textContent = `${completed} / ${questions.length} 완료`;
+      elements.progressText.textContent = `${completed} / ${roundQuestions.length} 완료`;
       elements.scoreText.textContent = `${score}점`;
-      elements.progressFill.style.width = `${completed / questions.length * 100}%`;
+      elements.progressFill.style.width = `${completed / roundQuestions.length * 100}%`;
       elements.progress.setAttribute("aria-valuenow", completed);
-      elements.progress.setAttribute("aria-valuetext", `${questions.length}문제 중 ${completed}문제 완료`);
+      elements.progress.setAttribute("aria-valuetext", `${roundQuestions.length}문제 중 ${completed}문제 완료`);
     }
 
     function showQuestion(focus = false) {
       answered = false;
-      const item = questions[current];
-      elements.number.textContent = `QUESTION ${String(current + 1).padStart(2, "0")} / ${questions.length}`;
+      const item = roundQuestions[current];
+      elements.number.textContent = `QUESTION ${String(current + 1).padStart(2, "0")} / ${roundQuestions.length}`;
       elements.question.textContent = item.question;
       elements.options.replaceChildren();
       elements.feedback.hidden = true;
@@ -348,9 +392,13 @@
     function selectAnswer(selected) {
       if (answered) return;
       answered = true;
-      const item = questions[current];
+      const item = roundQuestions[current];
       const correct = selected === item.answer;
-      if (correct) score++;
+      if (correct) {
+        score++;
+      } else {
+        wrongAnswers.push({ questionIndex: current, selected });
+      }
       Array.from(elements.options.children).forEach((button, index) => {
         button.disabled = true;
         if (index === item.answer || (index === selected && !correct)) {
@@ -405,12 +453,36 @@
         : highScore === null
           ? "브라우저 저장소를 사용할 수 없어 최고 기록을 확인하거나 저장할 수 없어요. 이번 점수는 정상적으로 표시돼요."
           : "브라우저 저장소를 사용할 수 없어 새 최고 기록을 저장할 수 없어요. 이번 점수는 정상적으로 표시돼요.";
+      elements.reviewEmpty.hidden = wrongAnswers.length > 0;
+      elements.reviewList.hidden = wrongAnswers.length === 0;
+      elements.reviewList.replaceChildren();
+      wrongAnswers.forEach(({ questionIndex, selected }) => {
+        const item = roundQuestions[questionIndex];
+        const entry = document.createElement("li");
+        entry.className = "review-item";
+        const heading = document.createElement("h4");
+        heading.textContent = `${questionIndex + 1}. ${item.question}`;
+        const details = document.createElement("dl");
+        [
+          ["내가 고른 답", item.options[selected]],
+          ["정답", item.options[item.answer]],
+          ["해설", item.explanation]
+        ].forEach(([label, text]) => {
+          const term = document.createElement("dt");
+          term.textContent = label;
+          const description = document.createElement("dd");
+          description.textContent = text;
+          details.append(term, description);
+        });
+        entry.append(heading, details);
+        elements.reviewList.append(entry);
+      });
       elements.resultTitle.focus();
     }
 
     elements.next.addEventListener("click", () => {
       if (!answered) return;
-      if (current === questions.length - 1) {
+      if (current === roundQuestions.length - 1) {
         showResult();
       } else {
         current++;
@@ -420,6 +492,10 @@
     elements.restart.addEventListener("click", () => {
       current = 0;
       score = 0;
+      wrongAnswers = [];
+      elements.reviewList.replaceChildren();
+      elements.reviewEmpty.hidden = true;
+      roundQuestions = createRound();
       elements.result.classList.remove("celebrate");
       elements.result.hidden = true;
       elements.quiz.hidden = false;
